@@ -3,13 +3,14 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
-use rodio::{OutputStream, OutputStreamBuilder, PlayError, Sink, Source, StreamError};
+use rodio::{OutputStream, OutputStreamBuilder, PlayError, Sink, StreamError};
 use stream_download::http::reqwest::Client;
 use stream_download::http::HttpStream;
 use stream_download::source::DecodeError;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
+use tauri::{AppHandle, Emitter};
 
 use crate::radios::Station;
 
@@ -23,6 +24,14 @@ pub struct Player {
 pub enum PlayerError {
     StreamCreationError(StreamError),
     SinkCreationError(PlayError),
+}
+
+// buffer 5 seconds of audio
+// bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
+fn get_prefetch_bytes(bitrate: Option<u32>) -> u64 {
+    bitrate
+        .map(|v| (v / 8 * 1024 * 5) as u64)
+        .unwrap_or_else(|| (256 * 1024) as u64)
 }
 
 impl Player {
@@ -42,7 +51,11 @@ impl Player {
         })
     }
 
-    pub async fn play(&self, url: &str) -> Result<String, Box<dyn Error + Send + Sync>> {
+    pub async fn play(
+        &self,
+        app: AppHandle,
+        url: &str,
+    ) -> Result<String, Box<dyn Error + Send + Sync>> {
         // We need to add a header to tell the Icecast server that we can parse the metadata embedded
         // within the stream itself.
         let client = Client::builder().request_icy_metadata().build()?;
@@ -53,9 +66,7 @@ impl Player {
         println!("Icecast headers: {icy_headers:#?}\n");
         println!("content type={:?}\n", stream.content_type());
 
-        // buffer 5 seconds of audio
-        // bitrate (in kilobits) / bits per byte * bytes per kilobyte * 5 seconds
-        let prefetch_bytes = icy_headers.bitrate().unwrap() / 8 * 1024 * 5;
+        let prefetch_bytes = get_prefetch_bytes(icy_headers.bitrate());
 
         let reader = match StreamDownload::from_stream(
             stream,
@@ -66,7 +77,7 @@ impl Player {
                 // prevent any out-of-bounds reads
                 NonZeroUsize::new(512 * 1024).unwrap(),
             ),
-            Settings::default().prefetch_bytes(prefetch_bytes as u64),
+            Settings::default().prefetch_bytes(prefetch_bytes),
         )
         .await
         {
@@ -75,8 +86,10 @@ impl Player {
         };
         let sink_clone = Arc::clone(&self.sink);
         let metadata_interval = icy_headers.metadata_interval();
+        // Appending the stream to the sink has to be done in a separate thread, otherwise no sound will play
         let handle = tauri::async_runtime::spawn_blocking(move || {
             let sink = sink_clone.lock().unwrap();
+            sink.stop();
             sink.set_volume(0.25);
             sink.append(rodio::Decoder::new(IcyMetadataReader::new(
                 reader,
@@ -84,7 +97,10 @@ impl Player {
                 // response. This will allow us to parse the metadata within the stream
                 metadata_interval,
                 // Print the stream metadata whenever we receive new values
-                |metadata| println!("{metadata:#?}\n"),
+                move |metadata| {
+                    app.emit("title", metadata.unwrap().stream_title().unwrap_or(""))
+                        .unwrap()
+                },
             ))?);
             Ok::<_, Box<dyn Error + Send + Sync>>(())
         });
@@ -92,10 +108,9 @@ impl Player {
         Ok(icy_headers.name().unwrap_or("Unknown").to_string())
     }
 
-    pub fn pause(&self) -> Result<(), Box<dyn Error>> {
+    pub fn pause(&self) {
         let sink = self.sink.lock().unwrap();
 
         sink.stop();
-        Ok(())
     }
 }

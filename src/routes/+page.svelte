@@ -1,11 +1,17 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
+    import { listen } from "@tauri-apps/api/event";
 
     let url = $state("");
     let playerState = $state("");
+    let playing = $state("");
 
     let stations = $state<{ name: string; url: string }[]>();
     invoke("stations").then((m) => (stations = m as any));
+
+    listen("title", (event) => {
+        playing = event.payload as string;
+    });
 
     async function play(url: string) {
         playerState = await invoke("play", { url });
@@ -38,6 +44,7 @@
         >
     </form>
     <p>{playerState}</p>
+    <p>Playing: {playing}</p>
 </main>
 
 <style lang="css">
