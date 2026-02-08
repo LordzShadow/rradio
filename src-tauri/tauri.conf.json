@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "radio-app",
+  "productName": "RRadio",
   "version": "0.1.0",
   "identifier": "ee.prants.kustav.radio-app.app",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "radio-app",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "RRadio",
+        "width": 900,
+        "height": 700,
+        "hiddenTitle": true
       }
     ],
     "security": {
