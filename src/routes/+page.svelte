@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { Button } from "$lib/components/ui/button";
+    import { Slider } from "$lib/components/ui/slider";
     import { type Station } from "$lib/types/stations";
     import { executeCommand } from "$lib/utils/commands";
     import { listen } from "@tauri-apps/api/event";
@@ -32,12 +34,20 @@
         playerState = "Paused";
     }
 
+    $effect(() => {
+        if (volume !== undefined) {
+            setVolume(volume);
+        }
+    });
+
     async function setVolume(vol: number) {
         await executeCommand("set_volume", { volume: vol });
     }
 </script>
 
-<main class="w-screen h-screen flex flex-col items-center justify-center gap-4">
+<main
+    class="w-screen h-screen flex flex-col items-center justify-center gap-4 p-12"
+>
     {#each stations as station}
         <div class="station">
             <span
@@ -45,25 +55,18 @@
                     ? "text-blue-500"
                     : ""}>{station.name}</span
             >
-            <button
-                onclick={() => play(station.uuid)}
-                class="border px-2 border-stone-300 rounded bg-slate-300"
-                >Play</button
-            >
+            <Button onclick={() => play(station.uuid)} variant="outline">
+                Play
+            </Button>
         </div>
     {/each}
     <form class="row" onsubmit={pause}>
-        <button
-            type="submit"
-            class="border px-2 border-stone-300 rounded bg-slate-300"
-            >Pause</button
-        >
+        <Button type="submit" variant="outline">Pause</Button>
     </form>
     <p>{playerState} <span>{volume}</span></p>
     <p>Playing: {playing}</p>
-    <div>
-        <button onclick={() => setVolume((volume ?? 50) - 5)}>-</button>
-        <button onclick={() => setVolume((volume ?? 50) + 5)}>+</button>
+    <div class="w-full">
+        <Slider type="single" bind:value={volume} max={100} step={1}></Slider>
     </div>
 </main>
 
