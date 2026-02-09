@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
-use rodio::{OutputStream, OutputStreamBuilder, PlayError, Sink, StreamError};
+use rodio::{OutputStream, OutputStreamBuilder, Sink, StreamError};
 use stream_download::http::reqwest::Client;
 use stream_download::http::HttpStream;
 use stream_download::source::DecodeError;
@@ -17,13 +17,11 @@ use crate::radios::Station;
 pub struct Player {
     sink: Arc<Mutex<Sink>>,
     _stream: OutputStream,
-    current_station: Option<Station>,
 }
 
 #[derive(Debug)]
 pub enum PlayerError {
     StreamCreationError(StreamError),
-    SinkCreationError(PlayError),
 }
 
 // buffer 5 seconds of audio
@@ -46,25 +44,22 @@ impl Player {
 
         Ok(Self {
             sink: Arc::new(Mutex::new(sink)),
-            _stream: _stream,
-            current_station: None,
+            _stream,
         })
     }
 
     pub async fn play(
         &self,
         app: AppHandle,
-        url: &str,
+        station: &Station,
     ) -> Result<String, Box<dyn Error + Send + Sync>> {
         // We need to add a header to tell the Icecast server that we can parse the metadata embedded
         // within the stream itself.
         let client = Client::builder().request_icy_metadata().build()?;
 
-        let stream = HttpStream::new(client, url.parse()?).await?;
+        let stream = HttpStream::new(client, station.get_url().parse()?).await?;
 
         let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
-        println!("Icecast headers: {icy_headers:#?}\n");
-        println!("content type={:?}\n", stream.content_type());
 
         let prefetch_bytes = get_prefetch_bytes(icy_headers.bitrate());
 
@@ -105,7 +100,7 @@ impl Player {
             Ok::<_, Box<dyn Error + Send + Sync>>(())
         });
         handle.await??;
-        Ok(icy_headers.name().unwrap_or("Unknown").to_string())
+        Ok(station.get_name().to_string())
     }
 
     pub fn pause(&self) {

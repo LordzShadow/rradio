@@ -2,26 +2,32 @@ mod player;
 mod radios;
 mod tray;
 
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 pub use crate::player::Player;
-use crate::{radios::get_stations, tray::build_tray};
+use crate::{
+    radios::{get_station_by_uuid, get_stations},
+    tray::build_tray,
+};
 
 struct AppState {
     player: Player,
 }
 
 #[tauri::command]
-async fn play(app: AppHandle, url: &str) -> Result<String, String> {
-    let name = app
-        .clone()
-        .state::<AppState>()
+async fn play(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    uuid: &str,
+) -> Result<String, String> {
+    let station = get_station_by_uuid(uuid).ok_or("Station not found")?;
+    let name = state
         .player
-        .play(app, url)
+        .play(app, &station)
         .await
         .map_err(|err| err.to_string())?;
 
-    Ok(format!("Playing {}!", name))
+    Ok(name)
 }
 
 #[tauri::command]
@@ -38,7 +44,7 @@ fn stations() -> Vec<radios::Station> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let player = Player::new().unwrap();
-    let state = AppState { player: player };
+    let state = AppState { player };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
