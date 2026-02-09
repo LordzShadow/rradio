@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 use rodio::{OutputStream, OutputStreamBuilder, Sink, StreamError};
@@ -22,6 +22,7 @@ pub struct Player {
 #[derive(Debug)]
 pub enum PlayerError {
     StreamCreationError(StreamError),
+    SinkLockError(),
 }
 
 // buffer 5 seconds of audio
@@ -41,6 +42,7 @@ impl Player {
             }
         };
         let sink = rodio::Sink::connect_new(_stream.mixer());
+        sink.set_volume(0.2);
 
         Ok(Self {
             sink: Arc::new(Mutex::new(sink)),
@@ -79,19 +81,17 @@ impl Player {
             Ok(reader) => reader,
             Err(e) => Err(e.decode_error().await)?,
         };
-        let sink_clone = Arc::clone(&self.sink);
-        let metadata_interval = icy_headers.metadata_interval();
+
         // Appending the stream to the sink has to be done in a separate thread, otherwise no sound will play
+        let sink = Arc::clone(&self.sink);
+        let metadata_interval = icy_headers.metadata_interval();
         let handle = tauri::async_runtime::spawn_blocking(move || {
-            let sink = sink_clone.lock().unwrap();
-            sink.stop();
-            sink.set_volume(0.25);
+            let sink = sink.lock().unwrap();
+            sink.stop(); // Stop the current stream, if any
             sink.append(rodio::Decoder::new(IcyMetadataReader::new(
                 reader,
-                // Since we requested icy metadata, the metadata interval header should be present in the
-                // response. This will allow us to parse the metadata within the stream
-                metadata_interval,
-                // Print the stream metadata whenever we receive new values
+                metadata_interval, // If interval is present, fetch new data after interval has passed
+                // Emit the stream metadata whenever we receive new values
                 move |metadata| {
                     app.emit("title", metadata.unwrap().stream_title().unwrap_or(""))
                         .unwrap()
@@ -103,9 +103,29 @@ impl Player {
         Ok(station.get_name().to_string())
     }
 
-    pub fn pause(&self) {
-        let sink = self.sink.lock().unwrap();
+    pub fn pause(&self) -> Result<(), PlayerError> {
+        let sink = self.get_sink()?;
 
         sink.stop();
+        Ok(())
+    }
+
+    pub fn get_volume(&self) -> Result<f32, PlayerError> {
+        self.get_sink()
+            .map(|sink| sink.volume() * 100.0)
+            .map(f32::round)
+    }
+
+    pub fn set_volume(&self, app: AppHandle, volume: f32) -> Result<(), PlayerError> {
+        let sink = self.get_sink()?;
+        sink.set_volume(volume.clamp(0.0, 100.0) / 100.0);
+        drop(sink);
+
+        app.emit("volume_change", self.get_volume()?).unwrap();
+        Ok(())
+    }
+
+    fn get_sink(&self) -> Result<MutexGuard<'_, Sink>, PlayerError> {
+        self.sink.lock().map_err(|_| PlayerError::SinkLockError())
     }
 }
