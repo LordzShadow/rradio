@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
@@ -22,7 +21,10 @@ pub struct Player {
 
 #[derive(Debug)]
 pub enum PlayerError {
-    StreamCreationError(StreamError),
+    StreamCreation(StreamError),
+    AppEmit(tauri::Error),
+    StreamPlayback(String),
+    StreamDownload(String),
 }
 
 // buffer 5 seconds of audio
@@ -46,7 +48,7 @@ impl Player {
         let _stream = match OutputStreamBuilder::open_default_stream() {
             Ok(s) => s,
             Err(e) => {
-                return Err(PlayerError::StreamCreationError(e));
+                return Err(PlayerError::StreamCreation(e));
             }
         };
         let sink = rodio::Sink::connect_new(_stream.mixer());
@@ -58,16 +60,23 @@ impl Player {
         })
     }
 
-    pub async fn play(
-        &self,
-        app: AppHandle,
-        station: &Station,
-    ) -> Result<String, Box<dyn Error + Send + Sync>> {
+    pub async fn play(&self, app: AppHandle, station: &Station) -> Result<String, PlayerError> {
         // We need to add a header to tell the Icecast server that we can parse the metadata embedded
         // within the stream itself.
-        let client = Client::builder().request_icy_metadata().build()?;
+        let client = Client::builder()
+            .request_icy_metadata()
+            .build()
+            .map_err(|err| PlayerError::StreamPlayback(err.to_string()))?;
 
-        let stream = HttpStream::new(client, station.get_url().parse()?).await?;
+        let stream = HttpStream::new(
+            client,
+            station
+                .get_url()
+                .parse()
+                .map_err(|_| PlayerError::StreamDownload("".into()))?,
+        )
+        .await
+        .map_err(|err| PlayerError::StreamDownload(err.to_string()))?;
 
         let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
 
@@ -87,7 +96,9 @@ impl Player {
         .await
         {
             Ok(reader) => reader,
-            Err(e) => Err(e.decode_error().await)?,
+            Err(e) => {
+                Err(e.decode_error().await).map_err(|err| PlayerError::StreamDownload(err))?
+            }
         };
 
         // Appending the stream to the sink has to be done in a separate thread, otherwise no sound will play
@@ -96,23 +107,29 @@ impl Player {
         let handle = tauri::async_runtime::spawn(async move {
             let sink = sink.lock().await;
             sink.stop(); // Stop the current stream, if any
-            sink.append(rodio::Decoder::new(IcyMetadataReader::new(
-                reader,
-                metadata_interval, // If interval is present, fetch new data after interval has passed
-                // Emit the stream metadata whenever we receive new values
-                move |metadata| {
-                    app.emit(
-                        "title",
-                        metadata
-                            .map(|meta| meta.stream_title().unwrap_or("").to_string())
-                            .unwrap_or("".into()),
-                    )
-                    .unwrap_or(())
-                },
-            ))?);
-            Ok::<_, Box<dyn Error + Send + Sync>>(())
+            sink.append(
+                rodio::Decoder::new(IcyMetadataReader::new(
+                    reader,
+                    metadata_interval, // If interval is present, fetch new data after interval has passed
+                    // Emit the stream metadata whenever we receive new values
+                    move |metadata| {
+                        app.emit(
+                            "title",
+                            metadata
+                                .map(|meta| meta.stream_title().unwrap_or("").to_string())
+                                .unwrap_or("".into()),
+                        )
+                        .unwrap_or(())
+                    },
+                ))
+                .map_err(|err| PlayerError::StreamPlayback(err.to_string()))?,
+            );
+            Ok::<_, PlayerError>(())
         });
-        handle.await??;
+        handle
+            .await
+            .map_err(|err| PlayerError::StreamPlayback(err.to_string()))??;
+
         Ok(station.get_name().to_string())
     }
 
@@ -133,7 +150,7 @@ impl Player {
         sink.set_volume(percent_volume_to_sink(volume).clamp(0.0, 1.0));
 
         app.emit("volume_change", sink_volume_to_percent(sink.volume()))
-            .unwrap();
+            .map_err(PlayerError::AppEmit)?;
         Ok(())
     }
 }
