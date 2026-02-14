@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
 use rodio::{OutputStream, OutputStreamBuilder, Sink, StreamError};
@@ -10,6 +10,7 @@ use stream_download::source::DecodeError;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
+use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Emitter};
 
 use crate::radios::Station;
@@ -31,6 +32,14 @@ fn get_prefetch_bytes(bitrate: Option<u32>) -> u64 {
     bitrate
         .map(|v| (v / 8 * 1024 * 5) as u64)
         .unwrap_or_else(|| (256 * 1024) as u64)
+}
+
+fn sink_volume_to_percent(volume: f32) -> f32 {
+    (volume * 100.0).round()
+}
+
+fn percent_volume_to_sink(volume: f32) -> f32 {
+    volume / 100.0
 }
 
 impl Player {
@@ -85,8 +94,8 @@ impl Player {
         // Appending the stream to the sink has to be done in a separate thread, otherwise no sound will play
         let sink = Arc::clone(&self.sink);
         let metadata_interval = icy_headers.metadata_interval();
-        let handle = tauri::async_runtime::spawn_blocking(move || {
-            let sink = sink.lock().unwrap();
+        let handle = tauri::async_runtime::spawn(async move {
+            let sink = sink.lock().await;
             sink.stop(); // Stop the current stream, if any
             sink.append(rodio::Decoder::new(IcyMetadataReader::new(
                 reader,
@@ -103,29 +112,24 @@ impl Player {
         Ok(station.get_name().to_string())
     }
 
-    pub fn pause(&self) -> Result<(), PlayerError> {
-        let sink = self.get_sink()?;
+    pub async fn pause(&self) -> Result<(), PlayerError> {
+        let sink = self.sink.lock().await;
 
         sink.stop();
         Ok(())
     }
 
-    pub fn get_volume(&self) -> Result<f32, PlayerError> {
-        self.get_sink()
-            .map(|sink| sink.volume() * 100.0)
-            .map(f32::round)
+    pub async fn get_volume(&self) -> Result<f32, PlayerError> {
+        let sink = self.sink.lock().await;
+        Ok(sink_volume_to_percent(sink.volume()))
     }
 
-    pub fn set_volume(&self, app: AppHandle, volume: f32) -> Result<(), PlayerError> {
-        let sink = self.get_sink()?;
-        sink.set_volume(volume.clamp(0.0, 100.0) / 100.0);
-        drop(sink);
+    pub async fn set_volume(&self, app: AppHandle, volume: f32) -> Result<(), PlayerError> {
+        let sink = self.sink.lock().await;
+        sink.set_volume(percent_volume_to_sink(volume).clamp(0.0, 1.0));
 
-        app.emit("volume_change", self.get_volume()?).unwrap();
+        app.emit("volume_change", sink_volume_to_percent(sink.volume()))
+            .unwrap();
         Ok(())
-    }
-
-    fn get_sink(&self) -> Result<MutexGuard<'_, Sink>, PlayerError> {
-        self.sink.lock().map_err(|_| PlayerError::SinkLockError())
     }
 }

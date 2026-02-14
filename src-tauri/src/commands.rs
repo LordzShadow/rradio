@@ -22,12 +22,16 @@ pub async fn play(
 }
 
 #[tauri::command]
-pub fn pause(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.player.pause().map_err(|_| "Failed to pause".into())
+pub async fn pause(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state
+        .player
+        .pause()
+        .await
+        .map_err(|_| "Failed to pause".into())
 }
 
 #[tauri::command]
-pub fn set_volume(
+pub async fn set_volume(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
     volume: f32,
@@ -35,14 +39,16 @@ pub fn set_volume(
     state
         .player
         .set_volume(app, volume)
+        .await
         .map_err(|_| "Failed to set volume".into())
 }
 
 #[tauri::command]
-pub fn get_volume(state: tauri::State<'_, AppState>) -> Result<f32, String> {
+pub async fn get_volume(state: tauri::State<'_, AppState>) -> Result<f32, String> {
     state
         .player
         .get_volume()
+        .await
         .map_err(|_| "Failed to get volume".into())
 }
 
