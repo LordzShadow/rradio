@@ -17,7 +17,7 @@ rradio/
 │   ├── routes/                   # SvelteKit routes
 │   │   ├── +page.svelte          # Main page (radio UI)
 │   │   ├── +layout.svelte        # Layout component
-│   │   ├── +layout.ts            # Layout server logic
+│   │   ├── +layout.ts            # Universal layout logic
 │   │   └── layout.css            # Styles
 │   └── app.html                  # HTML shell
 ├── src-tauri/                    # Tauri desktop backend (Rust)
@@ -347,7 +347,7 @@ VSCode settings (see `.vscode/settings.json`):
 
 - **Tauri Docs**: https://v2.tauri.app/
 - **SvelteKit Docs**: https://kit.svelte.dev/
-- **Svelte 5 Docs**: https://svelte-5-preview.vercel.app/docs/introduction
+- **Svelte 5 Docs**: https://svelte.dev/docs/svelte/overview
 - **Vite Docs**: https://vitejs.dev/
 - **Tailwind CSS**: https://tailwindcss.com/
 - **Rodio (Rust Audio)**: https://docs.rs/rodio/
