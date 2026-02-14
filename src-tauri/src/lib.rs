@@ -1,59 +1,62 @@
+mod commands;
 mod player;
 mod radios;
 mod tray;
 
-use tauri::AppHandle;
-
 pub use crate::player::Player;
-use crate::{
-    radios::{get_station_by_uuid, get_stations},
-    tray::build_tray,
-};
+
+#[derive(Debug, thiserror::Error)]
+enum AppError {
+    #[error("Failed to execute command {0}")]
+    Command(String),
+    #[error("Station {0} not found")]
+    StationNotFound(String),
+}
+
+#[derive(serde::Serialize)]
+#[serde(tag = "kind", content = "message")]
+#[serde(rename_all = "camelCase")]
+enum ErrorKind {
+    Command(String),
+}
+
+impl serde::Serialize for AppError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let error_message = self.to_string();
+        let error_kind = match self {
+            Self::Command(_) => ErrorKind::Command(error_message),
+            Self::StationNotFound(_) => ErrorKind::Command(error_message),
+        };
+        error_kind.serialize(serializer)
+    }
+}
 
 struct AppState {
     player: Player,
 }
 
-#[tauri::command]
-async fn play(
-    app: AppHandle,
-    state: tauri::State<'_, AppState>,
-    uuid: &str,
-) -> Result<String, String> {
-    let station = get_station_by_uuid(uuid).ok_or("Station not found")?;
-    let name = state
-        .player
-        .play(app, &station)
-        .await
-        .map_err(|err| err.to_string())?;
-
-    Ok(name)
-}
-
-#[tauri::command]
-async fn pause(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    state.player.pause();
-    Ok(())
-}
-
-#[tauri::command]
-fn stations() -> Vec<radios::Station> {
-    get_stations()
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let player = Player::new().unwrap();
+    let player = Player::new().expect("Could not initialize player!");
     let state = AppState { player };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(state)
         .setup(|app| {
-            build_tray(app)?;
+            tray::build_tray(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![play, pause, stations])
+        .invoke_handler(tauri::generate_handler![
+            commands::play,
+            commands::pause,
+            commands::stations,
+            commands::set_volume,
+            commands::get_volume
+        ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("Error while running tauri application");
 }
