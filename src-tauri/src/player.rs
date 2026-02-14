@@ -23,7 +23,6 @@ pub struct Player {
 #[derive(Debug)]
 pub enum PlayerError {
     StreamCreationError(StreamError),
-    SinkLockError(),
 }
 
 // buffer 5 seconds of audio
@@ -102,8 +101,13 @@ impl Player {
                 metadata_interval, // If interval is present, fetch new data after interval has passed
                 // Emit the stream metadata whenever we receive new values
                 move |metadata| {
-                    app.emit("title", metadata.unwrap().stream_title().unwrap_or(""))
-                        .unwrap()
+                    app.emit(
+                        "title",
+                        metadata
+                            .map(|meta| meta.stream_title().unwrap_or("").to_string())
+                            .unwrap_or("".into()),
+                    )
+                    .unwrap_or(())
                 },
             ))?);
             Ok::<_, Box<dyn Error + Send + Sync>>(())

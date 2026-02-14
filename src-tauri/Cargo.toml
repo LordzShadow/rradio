@@ -29,3 +29,4 @@ stream-download = { version = "0.23.0", features = ["reqwest-rustls",
   "registry"] }
 icy-metadata = "0.6.0"
 rodio = "0.21.1"
+thiserror = "2.0.18"
