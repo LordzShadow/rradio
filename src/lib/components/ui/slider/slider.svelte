@@ -21,12 +21,12 @@ get along, so we shut typescript up by casting `value` to `never`.
     data-slot="slider"
     {orientation}
     class={cn(
-        "relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
+        "relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
         className,
     )}
     {...restProps}
 >
-    {#snippet children({ thumbs })}
+    {#snippet children({ thumbItems })}
         <span
             data-orientation={orientation}
             data-slot="slider-track"
@@ -41,10 +41,17 @@ get along, so we shut typescript up by casting `value` to `never`.
                 )}
             />
         </span>
-        {#each thumbs as thumb (thumb)}
+        {#each thumbItems as thumb (thumb)}
+            <SliderPrimitive.ThumbLabel
+                data-orientation={orientation}
+                index={thumb.index}
+                class="bg-muted text-foreground text-nowrap rounded-md px-2 text-sm data-[orientation=horizontal]:mb-2 data-[orientation=vertical]:-mb-5 data-[orientation=vertical]:mx-3"
+            >
+                {thumb.value}
+            </SliderPrimitive.ThumbLabel>
             <SliderPrimitive.Thumb
                 data-slot="slider-thumb"
-                index={thumb}
+                index={thumb.index}
                 class="border-primary ring-ring/50 block size-4 shrink-0 rounded-full border bg-white shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
             />
         {/each}

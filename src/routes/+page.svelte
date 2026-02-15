@@ -5,6 +5,7 @@
     import { executeCommand } from "$lib/utils/executeCommand";
     import { EventWrapper } from "$lib/utils/events";
     import { onDestroy } from "svelte";
+    import { Label } from "$lib/components/ui/label";
 
     let playerState = $state("");
     let playing = $state("");
@@ -71,10 +72,9 @@
         <p>{playerState}</p>
         <p>Playing: {playing || "-"}</p>
     </div>
-    <div class="flex flex-col items-center w-12">
-        <label for="volume">{volume}</label>
+    <div class="flex flex-col items-center w-12 gap-2">
         <Slider
-            id="volume"
+            aria-labelledby="volume-label"
             type="single"
             orientation="vertical"
             value={volume}
@@ -82,6 +82,7 @@
             max={100}
             step={1}
         ></Slider>
+        <Label id="volume-label">Volume</Label>
     </div>
 </div>
 
