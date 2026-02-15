@@ -44,9 +44,13 @@
         await executeCommand("set_volume", { volume: vol });
     }
 
-    onDestroy(async () => {
-        await titleChangeEvent.unlisten();
-        await volumeChangeEvent.unlisten();
+    onDestroy(() => {
+        void titleChangeEvent.unlisten().catch((error) => {
+            console.error("Failed to unlisten titleChangeEvent:", error);
+        });
+        void volumeChangeEvent.unlisten().catch((error) => {
+            console.error("Failed to unlisten volumeChangeEvent:", error);
+        });
     });
 </script>
 
