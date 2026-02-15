@@ -13,7 +13,12 @@ export class EventWrapper {
 
   async unlisten(): Promise<void> {
     if (!this.listenerPromise) return;
-    const unlisten = await this.listenerPromise;
-    return unlisten();
+    try {
+      const unlisten = await this.listenerPromise;
+      unlisten();
+      this.listenerPromise = undefined;
+    } catch (error) {
+      console.error("Failed to unlisten", error);
+    }
   }
 }
