@@ -7,7 +7,6 @@
     import { onDestroy } from "svelte";
     import { Label } from "$lib/components/ui/label";
 
-    let playerState = $state("");
     let playing = $state("");
     let currentStationUuid = $state("");
     let volume = $state<number>(0);
@@ -30,14 +29,13 @@
 
     async function play(uuid: string) {
         currentStationUuid = uuid;
-        playerState = await executeCommand("play", { uuid });
+        await executeCommand("play", { uuid });
     }
 
     async function pause(event: Event) {
         event.preventDefault();
 
         await executeCommand("pause");
-        playerState = "Paused";
         playing = "";
     }
 
@@ -58,7 +56,7 @@
             <div class="station">
                 <span
                     class={currentStationUuid === station.uuid
-                        ? "text-blue-500"
+                        ? "text-primary"
                         : ""}>{station.name}</span
                 >
                 <Button onclick={() => play(station.uuid)} variant="outline">
@@ -69,7 +67,6 @@
         <form class="row" onsubmit={pause}>
             <Button type="submit" variant="outline">Pause</Button>
         </form>
-        <p>{playerState}</p>
         <p>Playing: {playing || "-"}</p>
     </div>
     <div class="flex flex-col items-center w-12 gap-2">
