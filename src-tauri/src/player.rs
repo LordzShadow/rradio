@@ -19,12 +19,18 @@ pub struct Player {
     _stream: OutputStream,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum PlayerError {
-    StreamCreation(StreamError),
-    AppEmit(tauri::Error),
-    StreamPlayback(String),
-    StreamDownload(String),
+    #[error("Failed to create stream")]
+    StreamCreation(#[from] StreamError),
+    #[error("Failed to emit event")]
+    AppEmit(#[from] tauri::Error),
+    #[error("Failed to play stream")]
+    StreamPlayback(#[from] Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("Failed to download stream")]
+    StreamDownload(Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("Failed to initialize stream: {0}")]
+    StreamInit(String),
 }
 
 // buffer 5 seconds of audio
@@ -66,17 +72,17 @@ impl Player {
         let client = Client::builder()
             .request_icy_metadata()
             .build()
-            .map_err(|err| PlayerError::StreamPlayback(err.to_string()))?;
+            .map_err(|err| PlayerError::StreamPlayback(Box::new(err)))?;
 
         let stream = HttpStream::new(
             client,
             station
                 .get_url()
                 .parse()
-                .map_err(|_| PlayerError::StreamDownload("".into()))?,
+                .map_err(|err| PlayerError::StreamDownload(Box::new(err)))?,
         )
         .await
-        .map_err(|err| PlayerError::StreamDownload(err.to_string()))?;
+        .map_err(|err| PlayerError::StreamDownload(Box::new(err)))?;
 
         let icy_headers = IcyHeaders::parse_from_headers(stream.headers());
 
@@ -96,9 +102,7 @@ impl Player {
         .await
         {
             Ok(reader) => reader,
-            Err(e) => {
-                Err(e.decode_error().await).map_err(|err| PlayerError::StreamDownload(err))?
-            }
+            Err(err) => Err(PlayerError::StreamInit(err.decode_error().await))?,
         };
 
         // Appending the stream to the sink has to be done in a separate thread, otherwise no sound will play
@@ -122,13 +126,13 @@ impl Player {
                         .unwrap_or(())
                     },
                 ))
-                .map_err(|err| PlayerError::StreamPlayback(err.to_string()))?,
+                .map_err(|err| PlayerError::StreamPlayback(Box::new(err)))?,
             );
             Ok::<_, PlayerError>(())
         });
         handle
             .await
-            .map_err(|err| PlayerError::StreamPlayback(err.to_string()))??;
+            .map_err(|err| PlayerError::StreamPlayback(Box::new(err)))??;
 
         Ok(station.get_name().to_string())
     }

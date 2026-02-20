@@ -17,7 +17,7 @@ pub async fn play(
         .player
         .play(app, &station)
         .await
-        .map_err(|_| AppError::Command("play".into()))?;
+        .map_err(|err| AppError::Player("play".into(), err))?;
 
     Ok(name)
 }
@@ -28,7 +28,7 @@ pub async fn pause(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
         .player
         .pause()
         .await
-        .map_err(|_| AppError::Command("pause".into()))
+        .map_err(|err| AppError::Player("pause".into(), err))
 }
 
 #[tauri::command]
@@ -41,7 +41,7 @@ pub async fn set_volume(
         .player
         .set_volume(app, volume)
         .await
-        .map_err(|_| AppError::Command("set_volume".into()))
+        .map_err(|err| AppError::Player("set_volume".into(), err))
 }
 
 #[tauri::command]
@@ -50,7 +50,7 @@ pub async fn get_volume(state: tauri::State<'_, AppState>) -> Result<f32, AppErr
         .player
         .get_volume()
         .await
-        .map_err(|_| AppError::Command("get_volume".into()))
+        .map_err(|err| AppError::Player("get_volume".into(), err))
 }
 
 #[tauri::command]

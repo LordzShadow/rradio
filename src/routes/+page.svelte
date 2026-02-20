@@ -13,7 +13,7 @@
 
     let stations = $state<Station[]>([]);
     executeCommand("stations").then((m) => (stations = m));
-    executeCommand("get_volume").then((vol) => (volume = vol as number));
+    executeCommand("get_volume").then((vol) => (volume = vol));
 
     let titleChangeEvent = $state<EventWrapper>(
         new EventWrapper("title", (event) => {
@@ -29,7 +29,9 @@
 
     async function play(uuid: string) {
         currentStationUuid = uuid;
-        await executeCommand("play", { uuid });
+        await executeCommand("play", { uuid }).catch((error) => {
+            console.error("Failed to play station:", error);
+        });
     }
 
     async function pause(event: Event) {

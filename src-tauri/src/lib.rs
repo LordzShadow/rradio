@@ -4,20 +4,21 @@ mod radios;
 mod tray;
 
 pub use crate::player::Player;
+use crate::player::PlayerError;
 
 #[derive(Debug, thiserror::Error)]
 enum AppError {
-    #[error("Failed to execute command {0}")]
-    Command(String),
+    #[error("Failed to execute player command")]
+    Player(String, PlayerError),
     #[error("Station {0} not found")]
     StationNotFound(String),
 }
 
 #[derive(serde::Serialize)]
-#[serde(tag = "kind", content = "message")]
 #[serde(rename_all = "camelCase")]
 enum ErrorKind {
-    Command(String),
+    PlayerError { error: String, message: String },
+    StationNotFound { message: String },
 }
 
 impl serde::Serialize for AppError {
@@ -27,8 +28,13 @@ impl serde::Serialize for AppError {
     {
         let error_message = self.to_string();
         let error_kind = match self {
-            Self::Command(_) => ErrorKind::Command(error_message),
-            Self::StationNotFound(_) => ErrorKind::Command(error_message),
+            Self::Player(_, err) => ErrorKind::PlayerError {
+                error: err.to_string(),
+                message: error_message,
+            },
+            Self::StationNotFound(_) => ErrorKind::StationNotFound {
+                message: error_message,
+            },
         };
         error_kind.serialize(serializer)
     }
