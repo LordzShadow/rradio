@@ -2,7 +2,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use icy_metadata::{IcyHeaders, IcyMetadataReader, RequestIcyMetadata};
-use rodio::{OutputStream, OutputStreamBuilder, Sink, StreamError};
+use rodio::{DeviceSinkBuilder, DeviceSinkError, MixerDeviceSink};
 use stream_download::http::reqwest::Client;
 use stream_download::http::HttpStream;
 use stream_download::source::DecodeError;
@@ -15,14 +15,14 @@ use tauri::{AppHandle, Emitter};
 use crate::radios::Station;
 
 pub struct Player {
-    sink: Arc<Mutex<Sink>>,
-    _stream: OutputStream,
+    audio_player: Arc<Mutex<rodio::Player>>,
+    _sink: MixerDeviceSink,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum PlayerError {
-    #[error("Failed to create stream")]
-    StreamCreation(#[from] StreamError),
+    #[error("Failed to create sink")]
+    SinkCreation(#[from] DeviceSinkError),
     #[error("Failed to emit event")]
     AppEmit(#[from] tauri::Error),
     #[error("Failed to play stream")]
@@ -41,28 +41,28 @@ fn get_prefetch_bytes(bitrate: Option<u32>) -> u64 {
         .unwrap_or_else(|| (256 * 1024) as u64)
 }
 
-fn sink_volume_to_percent(volume: f32) -> f32 {
+fn player_volume_to_percent(volume: f32) -> f32 {
     (volume * 100.0).round()
 }
 
-fn percent_volume_to_sink(volume: f32) -> f32 {
+fn percent_volume_to_player(volume: f32) -> f32 {
     volume / 100.0
 }
 
 impl Player {
     pub fn new() -> Result<Self, PlayerError> {
-        let _stream = match OutputStreamBuilder::open_default_stream() {
+        let _stream = match DeviceSinkBuilder::open_default_sink() {
             Ok(s) => s,
             Err(e) => {
-                return Err(PlayerError::StreamCreation(e));
+                return Err(PlayerError::SinkCreation(e));
             }
         };
-        let sink = rodio::Sink::connect_new(_stream.mixer());
-        sink.set_volume(0.2);
+        let player = rodio::Player::connect_new(_stream.mixer());
+        player.set_volume(0.2);
 
         Ok(Self {
-            sink: Arc::new(Mutex::new(sink)),
-            _stream,
+            audio_player: Arc::new(Mutex::new(player)),
+            _sink: _stream,
         })
     }
 
@@ -105,13 +105,13 @@ impl Player {
             Err(err) => Err(PlayerError::StreamInit(err.decode_error().await))?,
         };
 
-        // Appending the stream to the sink has to be done in a separate thread, otherwise no sound will play
-        let sink = Arc::clone(&self.sink);
+        // Appending the stream to the player has to be done in a separate thread, otherwise no sound will play
+        let audio_player = Arc::clone(&self.audio_player);
         let metadata_interval = icy_headers.metadata_interval();
         let handle = tauri::async_runtime::spawn(async move {
-            let sink = sink.lock().await;
-            sink.stop(); // Stop the current stream, if any
-            sink.append(
+            let audio_player = audio_player.lock().await;
+            audio_player.stop(); // Stop the current stream, if any
+            audio_player.append(
                 rodio::Decoder::new(IcyMetadataReader::new(
                     reader,
                     metadata_interval, // If interval is present, fetch new data after interval has passed
@@ -138,23 +138,26 @@ impl Player {
     }
 
     pub async fn pause(&self) -> Result<(), PlayerError> {
-        let sink = self.sink.lock().await;
+        let audio_player = self.audio_player.lock().await;
 
-        sink.stop();
+        audio_player.stop();
         Ok(())
     }
 
     pub async fn get_volume(&self) -> Result<f32, PlayerError> {
-        let sink = self.sink.lock().await;
-        Ok(sink_volume_to_percent(sink.volume()))
+        let audio_player = self.audio_player.lock().await;
+        Ok(player_volume_to_percent(audio_player.volume()))
     }
 
     pub async fn set_volume(&self, app: AppHandle, volume: f32) -> Result<(), PlayerError> {
-        let sink = self.sink.lock().await;
-        sink.set_volume(percent_volume_to_sink(volume).clamp(0.0, 1.0));
+        let audio_player = self.audio_player.lock().await;
+        audio_player.set_volume(percent_volume_to_player(volume).clamp(0.0, 1.0));
 
-        app.emit("volume_change", sink_volume_to_percent(sink.volume()))
-            .map_err(PlayerError::AppEmit)?;
+        app.emit(
+            "volume_change",
+            player_volume_to_percent(audio_player.volume()),
+        )
+        .map_err(PlayerError::AppEmit)?;
         Ok(())
     }
 }
