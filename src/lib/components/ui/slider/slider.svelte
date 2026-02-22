@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { Slider as SliderPrimitive } from "bits-ui";
     import { cn, type WithoutChildrenOrChild } from "$lib/utils/uiUtils.js";
+    import { Slider as SliderPrimitive } from "bits-ui";
 
     let {
         ref = $bindable(null),
@@ -42,13 +42,6 @@ get along, so we shut typescript up by casting `value` to `never`.
             />
         </span>
         {#each thumbItems as thumb (thumb)}
-            <SliderPrimitive.ThumbLabel
-                data-orientation={orientation}
-                index={thumb.index}
-                class="bg-muted text-foreground text-nowrap rounded-md px-2 text-sm data-[orientation=horizontal]:mb-2 data-[orientation=vertical]:-mb-5 data-[orientation=vertical]:mx-3"
-            >
-                {thumb.value}
-            </SliderPrimitive.ThumbLabel>
             <SliderPrimitive.Thumb
                 data-slot="slider-thumb"
                 index={thumb.index}

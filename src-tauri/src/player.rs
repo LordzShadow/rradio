@@ -9,14 +9,25 @@ use stream_download::source::DecodeError;
 use stream_download::storage::bounded::BoundedStorageProvider;
 use stream_download::storage::memory::MemoryStorageProvider;
 use stream_download::{Settings, StreamDownload};
-use tauri::async_runtime::Mutex;
+use tauri::async_runtime::{Mutex, RwLock};
 use tauri::{AppHandle, Emitter};
 
 use crate::radios::Station;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerState {
+    current_station_uuid: Option<String>,
+    volume: f32,
+    playing: bool,
+    track_title: Option<String>,
+}
+
 pub struct Player {
     audio_player: Arc<Mutex<rodio::Player>>,
     _sink: MixerDeviceSink,
+    current_station_uuid: Arc<RwLock<Option<String>>>,
+    track_title: Arc<RwLock<Option<String>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +74,8 @@ impl Player {
         Ok(Self {
             audio_player: Arc::new(Mutex::new(player)),
             _sink: _stream,
+            current_station_uuid: Arc::new(RwLock::new(None)),
+            track_title: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -107,23 +120,32 @@ impl Player {
 
         // Appending the stream to the player has to be done in a separate thread, otherwise no sound will play
         let audio_player = Arc::clone(&self.audio_player);
+        let track_title = Arc::clone(&self.track_title);
         let metadata_interval = icy_headers.metadata_interval();
         let handle = tauri::async_runtime::spawn(async move {
+            // Reset title on station change
+            {
+                let mut title = track_title.write().await;
+                *title = None;
+            }
+
             let audio_player = audio_player.lock().await;
             audio_player.stop(); // Stop the current stream, if any
             audio_player.append(
                 rodio::Decoder::new(IcyMetadataReader::new(
                     reader,
                     metadata_interval, // If interval is present, fetch new data after interval has passed
-                    // Emit the stream metadata whenever we receive new values
+                    // Emit the stream title whenever we receive new values
                     move |metadata| {
-                        app.emit(
-                            "title",
-                            metadata
-                                .map(|meta| meta.stream_title().unwrap_or("").to_string())
-                                .unwrap_or("".into()),
-                        )
-                        .unwrap_or(())
+                        let stream_title = metadata
+                            .map(|meta| meta.stream_title().map(|title| title.to_string()))
+                            .ok()
+                            .flatten();
+                        {
+                            let mut title = track_title.blocking_write();
+                            *title = stream_title.clone();
+                        }
+                        app.emit("title", stream_title).unwrap_or(())
                     },
                 ))
                 .map_err(|err| PlayerError::StreamPlayback(Box::new(err)))?,
@@ -134,11 +156,16 @@ impl Player {
             .await
             .map_err(|err| PlayerError::StreamPlayback(Box::new(err)))??;
 
+        let mut current_station_uuid = self.current_station_uuid.write().await;
+        *current_station_uuid = Some(station.get_uuid().to_string());
+
         Ok(station.get_name().to_string())
     }
 
     pub async fn pause(&self) -> Result<(), PlayerError> {
         let audio_player = self.audio_player.lock().await;
+        let mut title = self.track_title.write().await;
+        *title = None;
 
         audio_player.stop();
         Ok(())
@@ -159,5 +186,22 @@ impl Player {
         )
         .map_err(PlayerError::AppEmit)?;
         Ok(())
+    }
+
+    pub async fn get_player_state(&self) -> Result<PlayerState, PlayerError> {
+        let (playing, volume) = {
+            let audio_player = self.audio_player.lock().await;
+            let playing = !audio_player.empty(); // stop does not mark player as paused, so we use queue size here instead
+            let volume = player_volume_to_percent(audio_player.volume());
+            (playing, volume)
+        };
+        let current_station_uuid = self.current_station_uuid.read().await.clone();
+        let track_title = self.track_title.read().await.clone();
+        Ok(PlayerState {
+            playing,
+            volume,
+            current_station_uuid,
+            track_title,
+        })
     }
 }

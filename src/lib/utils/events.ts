@@ -7,8 +7,12 @@ import {
 export class EventWrapper {
   private listenerPromise: Promise<UnlistenFn> | undefined;
 
-  constructor(event: string, callback: EventCallback<unknown>) {
-    this.listenerPromise = listen(event, callback);
+  constructor(listenerPromise: Promise<UnlistenFn>) {
+    this.listenerPromise = listenerPromise;
+  }
+
+  static fromEvent(event: string, callback: EventCallback<unknown>) {
+    return new EventWrapper(listen(event, callback));
   }
 
   async unlisten(): Promise<void> {

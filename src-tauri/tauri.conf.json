@@ -16,7 +16,8 @@
         "title": "RRadio",
         "width": 900,
         "height": 700,
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "theme": null
       }
     ],
     "security": {

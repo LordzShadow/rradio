@@ -1,0 +1,70 @@
+import type { PlayerState } from "$lib/types/player";
+import { EventWrapper } from "$lib/utils/events";
+import { executeCommand } from "$lib/utils/executeCommand";
+
+export const playerState = $state<PlayerState>({
+  playing: false,
+  volume: 0,
+  loading: false,
+});
+
+const titleChangeEvent = $state<EventWrapper>(
+  EventWrapper.fromEvent("title", (event) => {
+    playerState.trackTitle = event.payload as string | undefined;
+  }),
+);
+
+const volumeChangeEvent = $state<EventWrapper>(
+  EventWrapper.fromEvent("volume_change", (event) => {
+    playerState.volume = event.payload as number;
+  }),
+);
+
+export const initPlayerState = async () => {
+  await executeCommand("get_player_state")
+    .then((state) => {
+      playerState.currentStationUuid = state.currentStationUuid;
+      playerState.playing = state.playing;
+      playerState.volume = state.volume;
+      playerState.trackTitle = state.trackTitle;
+    })
+    .catch((error) => {
+      console.error("Failed to initialize player state:", error); // TODO: better error handling (using sonner)
+    });
+};
+
+export async function play(uuid?: string) {
+  const stationUuid = uuid ?? playerState.currentStationUuid;
+  if (!stationUuid) throw Error("No station selected"); // TODO: better error handling (using sonner)
+
+  playerState.currentStationUuid = stationUuid;
+  playerState.trackTitle = undefined;
+  playerState.loading = true;
+  await executeCommand("play", { uuid: stationUuid })
+    .catch((error) => {
+      console.error("Failed to play station:", error); // TODO: better error handling (using sonner)
+    })
+    .then(() => {
+      playerState.playing = true;
+    })
+    .finally(() => {
+      playerState.loading = false;
+    });
+}
+
+export async function pause() {
+  await executeCommand("pause").catch((error) => {
+    console.error("Failed to pause station:", error);
+  });
+  playerState.playing = false;
+  playerState.trackTitle = undefined;
+}
+
+export async function setVolume(vol: number) {
+  var prevVolume = playerState.volume;
+  playerState.volume = vol;
+  await executeCommand("set_volume", { volume: vol }).catch((error) => {
+    console.error("Failed to set volume:", error); // TODO: better error handling (using sonner)
+    playerState.volume = prevVolume;
+  });
+}
