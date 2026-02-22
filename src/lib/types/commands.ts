@@ -1,5 +1,6 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
 import type { Station } from "./stations";
+import type { PlayerState } from "./player";
 
 type CommandDefinition = { payload: InvokeArgs; return: unknown };
 
@@ -9,6 +10,7 @@ interface CommandRegistry {
   set_volume: { payload: { volume: number }; return: void };
   get_volume: { payload: never; return: number };
   stations: { payload: never; return: Station[] };
+  get_player_state: { payload: never; return: PlayerState };
 }
 
 // Validation Guard: If CommandRegistry doesn't match the shape,

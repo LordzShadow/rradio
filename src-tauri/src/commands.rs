@@ -1,6 +1,7 @@
 use tauri::AppHandle;
 
 use crate::{
+    player::PlayerState,
     radios::{self},
     AppError, AppState,
 };
@@ -51,6 +52,15 @@ pub async fn get_volume(state: tauri::State<'_, AppState>) -> Result<f32, AppErr
         .get_volume()
         .await
         .map_err(|err| AppError::Player("get_volume".into(), err))
+}
+
+#[tauri::command]
+pub async fn get_player_state(state: tauri::State<'_, AppState>) -> Result<PlayerState, AppError> {
+    state
+        .player
+        .get_player_state()
+        .await
+        .map_err(|err| AppError::Player("get_player_state".into(), err))
 }
 
 #[tauri::command]
