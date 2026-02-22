@@ -141,9 +141,10 @@ impl Player {
                             .map(|meta| meta.stream_title().map(|title| title.to_string()))
                             .ok()
                             .flatten();
-                        let mut title = track_title.blocking_write();
-                        *title = stream_title.clone();
-                        drop(title);
+                        {
+                            let mut title = track_title.blocking_write();
+                            *title = stream_title.clone();
+                        }
                         app.emit("title", stream_title).unwrap_or(())
                     },
                 ))
@@ -194,13 +195,13 @@ impl Player {
             let volume = player_volume_to_percent(audio_player.volume());
             (playing, volume)
         };
-        let current_station_uuid = self.current_station_uuid.read().await;
-        let track_title = self.track_title.read().await;
+        let current_station_uuid = self.current_station_uuid.read().await.clone();
+        let track_title = self.track_title.read().await.clone();
         Ok(PlayerState {
             playing,
             volume,
-            current_station_uuid: current_station_uuid.clone(),
-            track_title: track_title.clone(),
+            current_station_uuid,
+            track_title,
         })
     }
 }
