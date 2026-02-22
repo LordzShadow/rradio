@@ -20,13 +20,17 @@ const volumeChangeEvent = $state<EventWrapper>(
   }),
 );
 
-export const initPlayerState = () => {
-  executeCommand("get_player_state").then((state) => {
-    playerState.currentStationUuid = state.currentStationUuid;
-    playerState.playing = state.playing;
-    playerState.volume = state.volume;
-    playerState.trackTitle = state.trackTitle;
-  });
+export const initPlayerState = async () => {
+  await executeCommand("get_player_state")
+    .then((state) => {
+      playerState.currentStationUuid = state.currentStationUuid;
+      playerState.playing = state.playing;
+      playerState.volume = state.volume;
+      playerState.trackTitle = state.trackTitle;
+    })
+    .catch((error) => {
+      console.error("Failed to initialize player state:", error); // TODO: better error handling (using sonner)
+    });
 };
 
 export async function play(uuid?: string) {
@@ -52,5 +56,10 @@ export async function pause() {
 }
 
 export async function setVolume(vol: number) {
-  await executeCommand("set_volume", { volume: vol });
+  var prevVolume = playerState.volume;
+  playerState.volume = vol;
+  await executeCommand("set_volume", { volume: vol }).catch((error) => {
+    console.error("Failed to set volume:", error); // TODO: better error handling (using sonner)
+    playerState.volume = prevVolume;
+  });
 }
