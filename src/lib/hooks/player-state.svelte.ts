@@ -10,7 +10,7 @@ export const playerState = $state<PlayerState>({
 
 const titleChangeEvent = $state<EventWrapper>(
   EventWrapper.fromEvent("title", (event) => {
-    playerState.trackTitle = event.payload as string;
+    playerState.trackTitle = event.payload as string | undefined;
   }),
 );
 
@@ -40,11 +40,16 @@ export async function play(uuid?: string) {
   playerState.currentStationUuid = stationUuid;
   playerState.trackTitle = undefined;
   playerState.loading = true;
-  await executeCommand("play", { uuid: stationUuid }).catch((error) => {
-    console.error("Failed to play station:", error);
-  });
-  playerState.playing = true;
-  playerState.loading = false;
+  await executeCommand("play", { uuid: stationUuid })
+    .catch((error) => {
+      console.error("Failed to play station:", error); // TODO: better error handling (using sonner)
+    })
+    .then(() => {
+      playerState.playing = true;
+    })
+    .finally(() => {
+      playerState.loading = false;
+    });
 }
 
 export async function pause() {

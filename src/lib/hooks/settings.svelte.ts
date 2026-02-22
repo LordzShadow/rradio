@@ -12,6 +12,9 @@ export const getAppTheme = () => theme;
 export const setAppTheme = async (value?: "light" | "dark" | "system") => {
   if (!value) return;
   theme = value;
+  await themeEvent?.unlisten().catch(() => {
+    console.error("Failed to unlisten theme event");
+  });
   if (value === "system") {
     setMode((await getCurrentWindow().theme()) ?? "dark");
     themeEvent = new EventWrapper(
@@ -21,8 +24,6 @@ export const setAppTheme = async (value?: "light" | "dark" | "system") => {
     );
   } else {
     setMode(value);
-    themeEvent?.unlisten().catch(() => {
-      console.error("Failed to unlisten theme event");
-    });
+    themeEvent = undefined;
   }
 };

@@ -10,15 +10,25 @@
 </script>
 
 {#if loading}
-    <Button size="icon" variant="ghost" disabled>
+    <Button size="icon" variant="ghost" disabled aria-label="Loading">
         <Spinner />
     </Button>
 {:else if playing}
-    <Button size="icon" variant="ghost" onclick={() => pause()}>
+    <Button
+        size="icon"
+        variant="ghost"
+        onclick={() => pause()}
+        aria-label="Pause playback"
+    >
         <PauseIcon class="w-6 h-6" />
     </Button>
 {:else}
-    <Button size="icon" variant="ghost" onclick={() => play()}>
+    <Button
+        size="icon"
+        variant="ghost"
+        onclick={() => play()}
+        aria-label="Start playback"
+    >
         <PlayIcon />
     </Button>
 {/if}

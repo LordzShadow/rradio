@@ -26,7 +26,7 @@
     <Popover.Content class="w-12" side="top">
         <div class="flex flex-col items-center gap-2">
             <Slider
-                aria-labelledby="volume-label"
+                aria-label="Volume"
                 type="single"
                 orientation="vertical"
                 value={playerState.volume}
