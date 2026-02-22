@@ -30,11 +30,13 @@ export const initPlayerState = () => {
 };
 
 export async function play(uuid?: string) {
-  if (!uuid) return; // TODO: show alert
-  playerState.currentStationUuid = uuid;
+  const stationUuid = uuid ?? playerState.currentStationUuid;
+  if (!stationUuid) throw Error("No station selected"); // TODO: better error handling (using sonner)
+
+  playerState.currentStationUuid = stationUuid;
   playerState.trackTitle = undefined;
   playerState.loading = true;
-  await executeCommand("play", { uuid }).catch((error) => {
+  await executeCommand("play", { uuid: stationUuid }).catch((error) => {
     console.error("Failed to play station:", error);
   });
   playerState.playing = true;
