@@ -5,6 +5,7 @@ import { executeCommand } from "$lib/utils/executeCommand";
 export const playerState = $state<PlayerState>({
   playing: false,
   volume: 0,
+  loading: false,
 });
 
 const titleChangeEvent = $state<EventWrapper>(
@@ -32,10 +33,12 @@ export async function play(uuid?: string) {
   if (!uuid) return; // TODO: show alert
   playerState.currentStationUuid = uuid;
   playerState.trackTitle = undefined;
+  playerState.loading = true;
   await executeCommand("play", { uuid }).catch((error) => {
     console.error("Failed to play station:", error);
   });
   playerState.playing = true;
+  playerState.loading = false;
 }
 
 export async function pause() {

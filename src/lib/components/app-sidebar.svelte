@@ -33,6 +33,7 @@
     ];
 
     const sidebar = useSidebar();
+    sidebar.setOpen(false); // default to collapsed sidebar
 </script>
 
 <Sidebar.Root collapsible="icon">

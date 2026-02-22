@@ -3,4 +3,6 @@ export interface PlayerState {
   volume: number;
   playing: boolean;
   trackTitle?: string;
+
+  loading?: boolean;
 }
