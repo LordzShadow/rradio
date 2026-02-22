@@ -123,14 +123,14 @@ impl Player {
         let track_title = Arc::clone(&self.track_title);
         let metadata_interval = icy_headers.metadata_interval();
         let handle = tauri::async_runtime::spawn(async move {
+            // Reset title on station change
+            {
+                let mut title = track_title.write().await;
+                *title = None;
+            }
+
             let audio_player = audio_player.lock().await;
             audio_player.stop(); // Stop the current stream, if any
-
-            // Reset title on station change
-            let mut title = track_title.write().await;
-            *title = None;
-            drop(title);
-
             audio_player.append(
                 rodio::Decoder::new(IcyMetadataReader::new(
                     reader,
@@ -188,12 +188,17 @@ impl Player {
     }
 
     pub async fn get_player_state(&self) -> Result<PlayerState, PlayerError> {
-        let audio_player = self.audio_player.lock().await;
+        let (playing, volume) = {
+            let audio_player = self.audio_player.lock().await;
+            let playing = !audio_player.empty(); // stop does not mark player as paused, so we use queue size here instead
+            let volume = player_volume_to_percent(audio_player.volume());
+            (playing, volume)
+        };
         let current_station_uuid = self.current_station_uuid.read().await;
         let track_title = self.track_title.read().await;
         Ok(PlayerState {
-            playing: !audio_player.empty(), // stop does not mark player as paused, so we use queue size here instead
-            volume: player_volume_to_percent(audio_player.volume()),
+            playing,
+            volume,
             current_station_uuid: current_station_uuid.clone(),
             track_title: track_title.clone(),
         })
