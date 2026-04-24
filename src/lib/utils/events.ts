@@ -1,5 +1,5 @@
 import {
-  listen,
+  listen as tauriListen,
   type EventCallback,
   type UnlistenFn,
 } from "@tauri-apps/api/event";
@@ -12,7 +12,7 @@ export class EventWrapper {
   }
 
   static fromEvent(event: string, callback: EventCallback<unknown>) {
-    return new EventWrapper(listen(event, callback));
+    return new EventWrapper(tauriListen(event, callback));
   }
 
   async unlisten(): Promise<void> {
